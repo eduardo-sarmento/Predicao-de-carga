@@ -1,0 +1,9 @@
+# ignore ALL files in ANY directory named temp
+Dataset/
+homeA-all/
+homeB-all/
+homeC-all/
+Código/__pycache__/
+Código/hyper.txt
+requirements.txt
+Código.zip
