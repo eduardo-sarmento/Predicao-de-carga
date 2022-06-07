@@ -4,23 +4,27 @@ import flwr as fl
 from collections import OrderedDict
 import tensorflow as tf
 from tensorflow import keras    
-from tensorflow.keras.models import Sequential   # to flatten the input data
+from tensorflow.keras.models import Sequential,load_model
 from tensorflow.keras.layers import Dense,Dropout,LSTM ,Conv1D,MaxPooling1D,Flatten,TimeDistributed, Input,RepeatVector,ConvLSTM2D
 from tensorflow.keras.callbacks import EarlyStopping,ModelCheckpoint
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import r2_score
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error,mean_squared_error
 from matplotlib import pyplot as plt
+import numpy as np
+
 
 
 class SmartHomeClient(fl.client.NumPyClient):
-    def __init__(self, model, x_train, x_test, y_train, y_test):
+    def __init__(self, model,x_train, x_test, y_train, y_test, casa, k_features):
         self.model = model
         self.x_train = x_train
         self.x_test = x_test
         self.y_train = y_train
         self.y_test = y_test
+        self.casa = casa
+        self.k_features = k_features
 
 
     def get_parameters(self):
@@ -28,64 +32,72 @@ class SmartHomeClient(fl.client.NumPyClient):
 
     def fit(self, parameters, config):
         self.model.set_weights(parameters)
-        self.model.fit(self.x_train, self.y_train, epochs=300, batch_size=128, steps_per_epoch=3, verbose=0)
+        es = EarlyStopping(monitor='val_loss', patience=20)
+        checkpoint = ModelCheckpoint('best_model'+ self.casa + '_' + str(self.k_features) + '_Federado.h5', monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+        self.model.fit(self.x_train, self.y_train, epochs=100,validation_split=0.1,batch_size=32, verbose=0,callbacks=[es,checkpoint])
+        self.model = load_model('best_model'+ self.casa + '_' + str(self.k_features) + '_Federado.h5')
         print(f"Training finished for round {config['rnd']}")
         return self.model.get_weights(), len(self.x_train), {}
 
     def evaluate(self, parameters, config):
         self.model.set_weights(parameters)
         loss, accuracy = self.model.evaluate(self.x_test, self.y_test)
-        return loss, len(self.x_test), {"accuracy": accuracy}
+        return loss, len(self.x_test), {"mae": accuracy}
 
 def main() -> None:
+    np.random.seed(0)
+    tf.random.set_seed(0)
     path = sys.argv[1]
     aux = path.split('/')
-    x_train, x_test, y_train, y_test, target_scaler = Smart_home.load_data(path)
+    casa = aux[-2][4]
+    df = Smart_home.load_data(path)
+    diff = False
+    n_steps = 10
+    horizon =  0  
+    k = 0
+
+    x_train,x_test, y_train, y_test, target_scaler, features_scalers = Smart_home.prepara_dataset(df,n_steps, horizon, k,casa,diff=diff)
     
-    x_train = x_train[...,None]
-    x_test = x_test[...,None]
+    model = Smart_home.CNN_LSTM_compile(x_train, y_train, horizon)
 
-    checkpoint = ModelCheckpoint("/home/nocs/TCC/Código", monitor='val_loss', verbose=1, save_best_only=True, mode='auto')
-    EarlyStopping(monitor='val_loss', patience=10)
-
-    # units=10 -> The cell and hidden states will be of dimension 10.
-    #             The number of parameters that need to be trained = 4*units*(units+2)
-    model = Sequential()
-    model.add(Conv1D(filters=64, kernel_size=1, activation='relu', input_shape=(x_train.shape[1], x_train.shape[2])))
-    model.add(Conv1D(filters=64, kernel_size=1, activation='relu'))
-    model.add(MaxPooling1D(pool_size=2))
-    model.add(Flatten())
-    model.add(RepeatVector(y_train.shape[1]))
-    model.add(LSTM(units=192, activation='tanh',return_sequences=True))
-    model.add(Dropout(0.2))
-    model.add(TimeDistributed(Dense(100, activation='relu')))
-    model.add(TimeDistributed(Dropout(0.2)))
-    model.add(TimeDistributed(Dense(1)))
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.01,clipnorm=1),
-              loss='mse',#loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),#,#loss='mae',#tf.keras.losses.MeanSquaredError(),
-              metrics='mae')
-
-    client = SmartHomeClient(model,x_train, x_test, y_train, y_test)
+    client = SmartHomeClient(model,x_train, x_test, y_train, y_test,casa,k)
     fl.client.start_numpy_client("0.0.0.0:8080", client)
-    pred = client.model.predict(x_test[:,:,0])
+    pred = client.model.predict(x_test)
+
     pred_rescaled = target_scaler.inverse_transform(pred.reshape(-1, 1))
+
+    #print(pred_rescaled)
     y_test_rescaled =  target_scaler.inverse_transform(y_test)
+    if diff:
+        pred_rescaled,y_test_rescaled = Smart_home.remove_lag(pred_rescaled,y_test_rescaled,x_test,features_scalers)
     mae = mean_absolute_error(y_test_rescaled, pred_rescaled)
+    rmse = mean_squared_error(y_test_rescaled, pred_rescaled, squared=False)
     score = r2_score(y_test_rescaled, pred_rescaled)
-    print('R-squared score para o conjunto de testes usando CNN-LSTM:', round(score,4))
+    print('R-squared score para o conjunto de testes usando CNN-LSTM FEDERADO ' + str(k) +' features:', round(score,4))
 
-    print("MAE CNN-LSTM: ", mae)
+    print('MAE CNN-LSTM FEDERADO ' + str(k) +' features:', mae)
+    print('RMSE CNN-LSTM FEDERADO ' + str(k) +' features:', rmse)
 
-       ## Plot all predictions
+    ## Plot all predictions
     plt.figure()
     plt.plot(pred_rescaled, label="Predito")
     plt.plot(y_test_rescaled, label="Real")
     plt.legend(loc="upper left")
     plt.xlabel('Tempo')
     plt.ylabel('Watts')
-    plt.title('Preditito vs. Real Consumo Eletrico CNN-LSTM Federated Learning')
+    plt.title('Preditito vs. Real Consumo Eletrico CNN-LSTM Federated Learning' + str(k) +' features para casa ' + casa)
     #plt.show()
-    plt.savefig('Preditito vs. Real Consumo Eletrico CNN-LSTM Federated Learning ' + aux[-2] +'.png')  
+    plt.savefig('Preditito vs. Real Consumo Eletrico CNN-LSTM Federated Learning ' + str(k) +' features para casa ' + casa +'.png')  
+
+    plt.figure()
+    plt.plot(pred_rescaled, label="Predito")
+    plt.legend(loc="upper left")
+    plt.xlabel('Tempo')
+    plt.ylabel('Watts')
+    plt.title('Preditito Consumo Eletrico CNN-LSTM Federated Learning' + str(k) +' features para casa ' + casa)
+    #plt.show()
+    plt.savefig('Preditito Consumo Eletrico CNN-LSTM Federated Learning ' + str(k) +' features para casa ' + casa +'.png')  
+
 
 
 if __name__ == "__main__":

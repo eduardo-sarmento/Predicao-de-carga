@@ -17,42 +17,41 @@ if __name__ == "__main__":
     path = sys.argv[1]
     aux = path.split('/')
 
-    n_steps = 5
+    n_steps = 10
     horizon =  0  
     k_features = 0
+    casa = aux[-2][4]
+    df = Smart_home.load_data(path)
+    x_train, x_test, y_train, y_test, target_scaler, features_scalers = Smart_home.prepara_dataset(df,n_steps, horizon, k_features,casa)
 
-    x_train, x_test, y_train, y_test, target_scaler= Smart_home.load_data(path, n_steps, horizon, k_features)
-
-    x_train = x_train[...,None]
-    x_test = x_test[...,None]
     
     tuner = kt.Hyperband(Smart_home.model_builder,
                      objective='val_mae',
-                     max_epochs=1,
+                     max_epochs=50,
                      factor=3,
                      directory='/home/nocs/TCC/' + aux[-2],
-                     #overwrite=True,
                      project_name='Tuning')
     stop_early = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
 
-    tuner.search(x_train, y_train, epochs=1, validation_split=0.2, callbacks=[stop_early],verbose=1)
-    # Get the optimal hyperparameters
+    tuner.search(np.array(x_train)[...,None], y_train, epochs=50, validation_split=0.2, callbacks=[stop_early],verbose=1)
+
     best_hps=tuner.get_best_hyperparameters(num_trials=1)[0]
     print(best_hps.values)
     print(f"Melhor numero de filtros primeira camada convolucional:{best_hps.get('f1')}")
     print(f"Melhor numero de filtros segunda camada convolucional:{best_hps.get('f2')}")
     print(f"Melhor numero de unidades da camada LSTM:{best_hps.get('units')}")
+    print(f"Melhor numero de unidades da camada densa:{best_hps.get('dense')}")
     print(f"Melhor learning rate:{best_hps.get('learning_rate')}")
+    print(f"Melhor ativacao da ultiuma camada:{best_hps.get('activation')}")
 
     model = tuner.hypermodel.build(best_hps)
     hypermodel = tuner.hypermodel.build(best_hps)
-    history = model.fit(x=x_train, y=y_train,  epochs=300, validation_split=0.2,verbose=0)
+    history = model.fit(x=np.array(x_train)[...,None],y=y_train,  epochs=300, validation_split=0.2,verbose=0)
     print(history.history)
-    val_acc_per_epoch = history.history['val_mse']
+    val_acc_per_epoch = history.history['val_mae']
     best_epoch = val_acc_per_epoch.index(max(val_acc_per_epoch)) + 1
     print('Melhor epoch: %d' % (best_epoch,))
 
-    # Retrain the model
     hypermodel.fit(x=x_train, y=y_train, epochs=best_epoch, validation_split=0.2)
     pred = model.predict(x_test)
     eval_result = hypermodel.evaluate(x_test, y_test)

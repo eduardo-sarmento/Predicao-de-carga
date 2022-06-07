@@ -9,3 +9,6 @@ requirements.txt
 Código.zip
 *.png
 .~lock.Resultados Local.ods#
+*.csv
+*.h5
+*.ods

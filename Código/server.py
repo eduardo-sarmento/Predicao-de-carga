@@ -11,7 +11,8 @@ from sklearn.metrics import r2_score
 from sklearn.metrics import mean_absolute_error
 from matplotlib import pyplot as plt
 from typing import Dict
-
+import sys
+import numpy as np
 
 
 # units=10 -> The cell and hidden states will be of dimension 10.
@@ -26,7 +27,11 @@ def fit_round(rnd: int) -> Dict:
 def get_eval_fn(model):
 #    """Return an evaluation function for server-side evaluation."""
 
-    _,X_test, _, y_test = Smart_home.load_data('/home/nocs/TCC/Dataset/2013/homeB-all/')
+    df = Smart_home.load_data('/home/nocs/TCC/Dataset/2013/homeB-all/')
+    n_steps = 10
+    horizon =  0  
+    k = 0
+    _,X_test,_,y_test , _, _ = Smart_home.prepara_dataset(df,n_steps, horizon, k,'B')
 
     def evaluate(parameters: fl.common.Weights):
         loss, accuracy = model.evaluate(X_test, y_test)
@@ -35,25 +40,22 @@ def get_eval_fn(model):
     return evaluate
 
 if __name__ == "__main__":
-    #x_train,_, y_train, _ = Smart_home.load_data('/home/nocs/TCC/Dataset/2013/homeB-all/')
-    #model = Sequential()
-    #model.add(Conv1D(filters=64, kernel_size=1, activation='relu', input_shape=(x_train.shape[1], x_train.shape[2])))
-    #model.add(Conv1D(filters=64, kernel_size=1, activation='relu'))
-    #model.add(MaxPooling1D(pool_size=2))
-    #model.add(Flatten())
-    #model.add(RepeatVector(y_train.shape[1]))
-    #model.add(LSTM(units=512, activation='tanh',return_sequences=True))
-    #model.add(Dropout(0.2))
-    #model.add(TimeDistributed(Dense(100, activation='relu')))
-    #model.add(TimeDistributed(Dropout(0.2)))
-    #model.add(TimeDistributed(Dense(1)))
-    #model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.01,clipnorm=1),
-    #          loss='mse',#loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),#,#loss='mae',#tf.keras.losses.MeanSquaredError(),
-    #          metrics='mae')
+    #path = sys.argv[1]
+    #aux = path.split('/')
+    #casa = aux[-2][4]
+    np.random.seed(0)
+    tf.random.set_seed(0)
+    #df = Smart_home.load_data('/home/nocs/TCC/Dataset/2013/homeB-all/')
+    n_steps = 10
+    horizon =  0  
+    k = 0
+    #x_train,_ , y_train,_ , target_scaler, features_scalers = Smart_home.prepara_dataset(df,n_steps, horizon, k,'B')
+    #model = Smart_home.CNN_LSTM_compile(x_train, y_train, horizon)
+
     
     strategy = fl.server.strategy.FedAvg(
         min_available_clients=3,
-    #    eval_fn=get_eval_fn(model),
+       # eval_fn=get_eval_fn(model),
         on_fit_config_fn=fit_round,
     )
-    fl.server.start_server("0.0.0.0:8080", strategy=strategy, config={"num_rounds": 3})
+    fl.server.start_server("0.0.0.0:8080", strategy=strategy, config={"num_rounds": 5})
