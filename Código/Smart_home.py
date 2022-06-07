@@ -50,8 +50,14 @@ def adiciona_lag(dataframe, n, horizon,diff):
                 
         for i in range(horizon):
                   dataframe['horizon_' + column + '_' + str(i+1)] = dataframe[column].shift(-(i+1))
-                  
-                  dataframe['lag_difference_horizon_' + column + '_' + str(i+1)] = dataframe['horizon_' + column + '_' + str(i+1)].diff(1)
+                  dataframe.dropna(inplace=True)
+                  if i != 0:
+                    dataframe['lag_difference_horizon_' + column + '_' + str(i+1)] = dataframe['horizon_' + column + '_' + str(i+1)] - dataframe[column] 
+
+                  else:
+                    dataframe['lag_difference_horizon_' + column + '_' + str(i+1)] = dataframe['horizon_' + column + '_' + str(i+1)] - dataframe['horizon_' + column + '_' + str(i)]
+
+                 
 
 
 def prepara_dataset(dataframe, n_steps, horizon, k_features, casa,diff=True,select=False):
