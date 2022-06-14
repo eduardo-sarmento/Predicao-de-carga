@@ -48,27 +48,28 @@ def adiciona_lag(dataframe, n, horizon,diff):
                   else:
                     dataframe['lag_difference_' + column + '_' + str(i+1)] = dataframe[column] - dataframe['lag_'+ column + '_' + str(i+1)]
                 
-        for i in range(horizon):
+        for i in range(horizon-1):
                   dataframe['horizon_' + column + '_' + str(i+1)] = dataframe[column].shift(-(i+1))
                   dataframe.dropna(inplace=True)
                   if i != 0:
-                    dataframe['lag_difference_horizon_' + column + '_' + str(i+1)] = dataframe['horizon_' + column + '_' + str(i+1)] - dataframe[column] 
-
+                    dataframe['lag_difference_h_' + column + '_' + str(i+1)] = dataframe['horizon_' + column + '_' + str(i+1)] - dataframe['horizon_' + column + '_' + str(i)]
+                    
                   else:
-                    dataframe['lag_difference_horizon_' + column + '_' + str(i+1)] = dataframe['horizon_' + column + '_' + str(i+1)] - dataframe['horizon_' + column + '_' + str(i)]
+                    dataframe['lag_difference_h_' + column + '_' + str(i+1)] = dataframe['horizon_' + column + '_' + str(i+1)] - dataframe[column] 
+                    
 
                  
 
 
 def prepara_dataset(dataframe, n_steps, horizon, k_features, casa,diff=True,select=False):
-
     dataframe.columns = pd.io.parsers.base_parser.ParserBase({'names':dataframe.columns, 'usecols':None})._maybe_dedup_names(dataframe.columns)
     if k_features != 0:
       adiciona_lag(dataframe,n_steps,horizon,diff)
+      print(dataframe.columns.str.contains('horizon_Watts_').to_list())
       if diff:
         columns = ['lag_difference_Watts_1']+dataframe.columns[dataframe.columns.str.contains('lag_difference_horizon_')].to_list()
       else:
-        columns = ['Watts']+dataframe.columns[dataframe.columns.str.contains('horizon_')].to_list()
+        columns = ['Watts']+dataframe.columns[dataframe.columns.str.contains('horizon_Watts_')].to_list()
       Y = dataframe[columns]
       X = dataframe.drop(columns, 1)  
 
@@ -86,7 +87,7 @@ def prepara_dataset(dataframe, n_steps, horizon, k_features, casa,diff=True,sele
       if diff:
         columns = ['lag_difference_Watts_1']+dataframe.columns[dataframe.columns.str.contains('lag_difference_horizon_')].to_list()
       else:
-        columns = ['Watts']+dataframe.columns[dataframe.columns.str.contains('horizon_')].to_list()
+        columns = ['Watts'] + df.columns[df.columns.str.contains('horizon_Watts_')].to_list()
       Y = df[columns]
       X = df.drop(columns, 1)
       x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.10, shuffle=False, random_state=0)
@@ -98,13 +99,6 @@ def prepara_dataset(dataframe, n_steps, horizon, k_features, casa,diff=True,sele
     y_train = y_train.fillna(y_train.mean())
     y_test = y_test.fillna(y_test.mean())
 
-    plt.figure()
-
-    plt.plot(y_test, label="Real")
-    plt.legend(loc="upper left")
-    plt.xlabel('Time')
-    plt.ylabel('Watts')
-    #plt.show()
 
     target_scaler = MinMaxScaler(feature_range=(-1, 1))
     scalers={}
@@ -123,7 +117,7 @@ def prepara_dataset(dataframe, n_steps, horizon, k_features, casa,diff=True,sele
     
     y_train = target_scaler.fit_transform(y_train)
     y_test = target_scaler.transform(y_test)
-
+    #print(y_test)
     return x_train, x_test, y_train, y_test, target_scaler, scalers
 
 def load_data(root_path):
@@ -174,6 +168,7 @@ def load_data(root_path):
   
   df_home = df_home[df_home['Watts'].notna()]
   df_home = df_home.select_dtypes(include=np.number)
+  print(df_home['Watts'].autocorr(10))
   df_resampled = df_home['Watts'].resample('15T').mean().to_frame()
   df_resampled['Standart_Deviation_Watts'] = df_home['Watts'].resample('15T').std()
   print(df_resampled['Watts'].autocorr(10))
@@ -197,7 +192,7 @@ def CNN_LSTM_compile(x_train, y_train, horizon):
         Activation('tanh'),
         Dense(32),
         #Dropout(0.20),
-        Dense(horizon+1)
+        Dense(horizon)
     ], name="lstm_cnn")
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
     model.compile(loss='mse', optimizer=optimizer, metrics=['mae'])
@@ -233,6 +228,7 @@ def model_builder(hp):
             metrics='mae')
 
   return model
+
 
 
 
