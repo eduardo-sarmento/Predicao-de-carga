@@ -27,14 +27,14 @@ if __name__ == "__main__":
    
     diff = False
     #n_steps = 10
-    #horizon =  5 
+    #horizon = 1 
     dataframe = Smart_home.load_data(path)
 
     k = 0
     scores = {"Combination" : [], "MAE" : [],"R2" : [],"RMSE" : []}
     es = EarlyStopping(monitor='val_loss', patience=20)
-    for horizon in range(10,40,step=4):
-        for n_steps in range(10,40,step=4):
+    for horizon in range(12,16,4):
+        for n_steps in range(12,16,4):
             if(n_steps >= horizon):
                 print((n_steps,horizon))
                 scores["Combination"].append((n_steps,horizon))
@@ -79,8 +79,8 @@ if __name__ == "__main__":
                 #print('RMSE CNN-LSTM ' + str(k) +' features:', rmse)
 df = pd.DataFrame.from_dict(scores)
 df.index = df['Combination']
-print(df.describe)
-df.to_csv("Result " + casa + "com " + str(k) + "features")
+print(scores)
+#df.to_csv("Result " + casa + "com " + str(k) + "features", mode='a', header=False)
 #plt.figure()
 #plt.plot(pred_rescaled, label="Predito")
 #plt.plot(y_test_rescaled, label="Real")

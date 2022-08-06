@@ -9,8 +9,7 @@ from tensorflow.keras.layers import Dense,Dropout,LSTM ,Conv1D,MaxPooling1D,Flat
 from tensorflow.keras.callbacks import EarlyStopping,ModelCheckpoint
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import r2_score
-from sklearn.metrics import mean_absolute_error,mean_squared_error
+from sklearn.metrics import mean_absolute_error,mean_squared_error,r2_score
 from matplotlib import pyplot as plt
 import numpy as np
 
@@ -53,8 +52,8 @@ def main() -> None:
     df = Smart_home.load_data(path)
     diff = False
     n_steps = 10
-    horizon =  0  
-    k = 0
+    horizon =  1  
+    k = 1
 
     x_train,x_test, y_train, y_test, target_scaler, features_scalers = Smart_home.prepara_dataset(df,n_steps, horizon, k,casa,diff=diff)
     
@@ -66,7 +65,6 @@ def main() -> None:
 
     pred_rescaled = target_scaler.inverse_transform(pred.reshape(-1, 1))
 
-    #print(pred_rescaled)
     y_test_rescaled =  target_scaler.inverse_transform(y_test)
     if diff:
         pred_rescaled,y_test_rescaled = Smart_home.remove_lag(pred_rescaled,y_test_rescaled,x_test,features_scalers)
@@ -78,7 +76,6 @@ def main() -> None:
     print('MAE CNN-LSTM FEDERADO ' + str(k) +' features:', mae)
     print('RMSE CNN-LSTM FEDERADO ' + str(k) +' features:', rmse)
 
-    ## Plot all predictions
     plt.figure()
     plt.plot(pred_rescaled, label="Predito")
     plt.plot(y_test_rescaled, label="Real")
@@ -86,18 +83,7 @@ def main() -> None:
     plt.xlabel('Tempo')
     plt.ylabel('Watts')
     plt.title('Preditito vs. Real Consumo Eletrico CNN-LSTM Federated Learning' + str(k) +' features para casa ' + casa)
-    #plt.show()
     plt.savefig('Preditito vs. Real Consumo Eletrico CNN-LSTM Federated Learning ' + str(k) +' features para casa ' + casa +'.png')  
-
-    plt.figure()
-    plt.plot(pred_rescaled, label="Predito")
-    plt.legend(loc="upper left")
-    plt.xlabel('Tempo')
-    plt.ylabel('Watts')
-    plt.title('Preditito Consumo Eletrico CNN-LSTM Federated Learning' + str(k) +' features para casa ' + casa)
-    #plt.show()
-    plt.savefig('Preditito Consumo Eletrico CNN-LSTM Federated Learning ' + str(k) +' features para casa ' + casa +'.png')  
-
 
 
 if __name__ == "__main__":

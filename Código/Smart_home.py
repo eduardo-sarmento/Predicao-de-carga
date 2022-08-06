@@ -16,14 +16,7 @@ from tensorflow import keras
 from tensorflow.keras import backend as K    
 from tensorflow.keras.models import Sequential   # to flatten the input data
 from tensorflow.keras.layers import Dense,Dropout,LSTM ,Conv1D,MaxPooling1D,Activation,TimeDistributed, Input,RepeatVector,GlobalAveragePooling1D,BatchNormalization
-import tensorflow_addons as tfa
-from tensorflow_addons.rnn import LayerNormLSTMCell
-from statsmodels.tsa import stattools
 from matplotlib import pyplot as plt
-from sklearn.feature_selection import SelectKBest, mutual_info_regression
-from sklearn.impute import SimpleImputer
-from pickle import dump, load
-from pandas_tfrecords import pd2tf, tf2pd
 
 
 import re
@@ -44,7 +37,7 @@ def adiciona_lag(dataframe, n, horizon,diff):
                   dataframe.dropna(inplace=True)
                 
                   if i != 0:
-                    dataframe['lag_difference_' + column + '_' + str(i+1)] = dataframe['lag_' + column + '_' + str(i)] - dataframe['lag_'+ column + '_' + str(i+1)]#dataframe['lag_'+ column + '_' + str(i+1)].diff(1)
+                    dataframe['lag_difference_' + column + '_' + str(i+1)] = dataframe['lag_' + column + '_' + str(i)] - dataframe['lag_'+ column + '_' + str(i+1)]
                   else:
                     dataframe['lag_difference_' + column + '_' + str(i+1)] = dataframe[column] - dataframe['lag_'+ column + '_' + str(i+1)]
                 
@@ -52,10 +45,10 @@ def adiciona_lag(dataframe, n, horizon,diff):
                   dataframe['horizon_' + column + '_' + str(i+1)] = dataframe[column].shift(-(i+1))
                   dataframe.dropna(inplace=True)
                   if i != 0:
-                    dataframe['lag_difference_h_' + column + '_' + str(i+1)] = dataframe['horizon_' + column + '_' + str(i+1)] - dataframe['horizon_' + column + '_' + str(i)]
+                    dataframe['lag_difference_horizon_' + column + '_' + str(i+1)] = dataframe['horizon_' + column + '_' + str(i+1)] - dataframe['horizon_' + column + '_' + str(i)]
                     
                   else:
-                    dataframe['lag_difference_h_' + column + '_' + str(i+1)] = dataframe['horizon_' + column + '_' + str(i+1)] - dataframe[column] 
+                    dataframe['lag_difference_horizon_' + column + '_' + str(i+1)] = dataframe['horizon_' + column + '_' + str(i+1)] - dataframe[column] 
                     
 
                  
@@ -65,7 +58,6 @@ def prepara_dataset(dataframe, n_steps, horizon, k_features, casa,diff=True,sele
     dataframe.columns = pd.io.parsers.base_parser.ParserBase({'names':dataframe.columns, 'usecols':None})._maybe_dedup_names(dataframe.columns)
     if k_features != 0:
       adiciona_lag(dataframe,n_steps,horizon,diff)
-      print(dataframe.columns.str.contains('horizon_Watts_').to_list())
       if diff:
         columns = ['lag_difference_Watts_1']+dataframe.columns[dataframe.columns.str.contains('lag_difference_horizon_')].to_list()
       else:
@@ -123,7 +115,8 @@ def prepara_dataset(dataframe, n_steps, horizon, k_features, casa,diff=True,sele
 def load_data(root_path):
   root = root_path
   data = []
-  power_directories=['/home/nocs/TCC/Dataset/2013/homeA-all/homeA-circuit/','/home/nocs/TCC/Dataset/2013/homeB-all/homeB-power/','/home/nocs/TCC/Dataset/2013/homeC-all/homeC-power/']
+  power_directories=[root + 'homeA-circuit/',root + 'homeB-power/',root + 'homeC-power/']
+  print(power_directories)
   all_directories = glob.glob(root+'*/')
   all_directories = [x for x in all_directories if x in power_directories]
   for dir in all_directories:
@@ -175,23 +168,18 @@ def load_data(root_path):
   return df_resampled
       
 def CNN_LSTM_compile(x_train, y_train, horizon):
-    relu_initializer = tf.keras.initializers.HeUniform()
-    tanh_initializer = tf.keras.initializers.GlorotNormal()
+    #adicionando uma dimensão extra a entrada pois para as camadas conv1d e lstm a entrada precisa ter 3 dimensoes
     x_train = np.array(x_train)[...,None]
     model = tf.keras.models.Sequential([
         Conv1D(64, kernel_size=3, padding='causal',strides=1,input_shape=(x_train.shape[1], x_train.shape[2])),
-        #BatchNormalization(),
         Activation('relu'),
         MaxPooling1D(strides=2),
         Conv1D(64, kernel_size=3,padding='causal', strides=1),
-        #BatchNormalization(),
         Activation('relu'),
         MaxPooling1D(strides=2),
-        LSTM(64, return_sequences=False),#,recurrent_dropout=0.5),
-        #BatchNormalization(),
+        LSTM(64, return_sequences=False),
         Activation('tanh'),
         Dense(32),
-        #Dropout(0.20),
         Dense(horizon)
     ], name="lstm_cnn")
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
@@ -221,7 +209,6 @@ def model_builder(hp):
   model.add(Activation('tanh')),
 
   model.add(Dense(hp_dense))
-  #model.add(Dropout(0.2))
   model.add(Dense(1,activation=hp_activation))
   model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp_learning_rate,clipnorm=1),
             loss='mse',
