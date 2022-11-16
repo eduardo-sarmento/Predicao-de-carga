@@ -33,8 +33,8 @@ if __name__ == "__main__":
     k = 0
     scores = {"Combination" : [], "MAE" : [],"R2" : [],"RMSE" : []}
     es = EarlyStopping(monitor='val_loss', patience=20)
-    for horizon in range(12,16,4):
-        for n_steps in range(12,16,4):
+    for horizon in range(12,44,4):
+        for n_steps in range(12,44,4):
             if(n_steps >= horizon):
                 print((n_steps,horizon))
                 scores["Combination"].append((n_steps,horizon))
